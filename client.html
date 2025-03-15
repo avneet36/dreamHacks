@@ -28,13 +28,28 @@
             color: #4CAF50;
         }
 
+        #videoContainer {
+            position: relative;
+            width: 100%;
+            max-width: 640px;
+            margin-bottom: 20px;
+        }
+
         video {
             border: 2px solid #4CAF50;
             border-radius: 8px;
             width: 100%;
-            max-width: 640px;
-            margin-bottom: 20px;
+            height: auto;
+            transform: scaleX(-1); /* Flip the video horizontally */
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
             height: 100%;
+            pointer-events: none; /* Ensure canvas doesn't block video interactions */
         }
 
         button {
@@ -76,28 +91,29 @@
         .status-value {
             color: #4CAF50;
         }
-        #container{
-            padding: 10px;
-        }
     </style>
 </head>
 <body>
-    <div id="container"></div>
     <h1>Webcam Video Feed</h1>
-    <video id="videoElement" autoplay playsinline></video>
+    <div id="videoContainer">
+        <video id="videoElement" autoplay playsinline></video>
+        <canvas id="overlayCanvas"></canvas>
+    </div>
     <button id="toggleButton">Start Webcam</button>
     <div id="info">
         <p><span class="status-label">Face Position:</span> <span id="faceInfo" class="status-value">N/A</span></p>
         <p><span class="status-label">Eyes Status:</span> <span id="eyesStatus" class="status-value">N/A</span></p>
         <p><span class="status-label">Asleep:</span> <span id="asleepStatus" class="status-value">N/A</span></p>
     </div>
-</div>
+
     <script>
         const videoElement = document.getElementById('videoElement');
         const toggleButton = document.getElementById('toggleButton');
         const faceInfo = document.getElementById('faceInfo');
         const eyesStatus = document.getElementById('eyesStatus');
         const asleepStatus = document.getElementById('asleepStatus');
+        const overlayCanvas = document.getElementById('overlayCanvas');
+        const canvasContext = overlayCanvas.getContext('2d');
 
         let stream;
         let isStreaming = false;
@@ -133,12 +149,50 @@
             }
         });
 
+        // Draw facial features on the canvas
+        function drawFacialFeatures(data) {
+            // Clear the canvas
+            canvasContext.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+            // Flip the canvas context to match the flipped video
+            canvasContext.save();
+            canvasContext.scale(-1, 1); // Flip horizontally
+            canvasContext.translate(-overlayCanvas.width, 0); // Adjust for flipped position
+
+            // Draw face rectangle
+            const face = data.face_position;
+            canvasContext.strokeStyle = '#4CAF50';
+            canvasContext.lineWidth = 2;
+            canvasContext.strokeRect(face.left, face.top, face.width, face.height);
+
+            /* Draw eyes
+            const eyes = data.eyes;
+            eyes.forEach(eye => {
+                canvasContext.beginPath();
+                canvasContext.arc(eye.left + eye.width / 2, eye.top + eye.height / 2, eye.width / 2, 0, 2 * Math.PI);
+                canvasContext.strokeStyle = '#FF0000';
+                canvasContext.lineWidth = 2;
+                canvasContext.stroke();
+            });*/
+
+            // Add cool effects (e.g., glowing lines)
+            canvasContext.shadowBlur = 10;
+            canvasContext.shadowColor = '#4CAF50';
+
+            // Restore the canvas context
+            canvasContext.restore();
+        }
+
         // Send image frames to the server
         async function sendFrameToServer(frame) {
             const canvas = document.createElement('canvas');
             canvas.width = frame.videoWidth;
             canvas.height = frame.videoHeight;
             const context = canvas.getContext('2d');
+
+            // Flip the captured frame horizontally before sending
+            context.translate(canvas.width, 0);
+            context.scale(-1, 1);
             context.drawImage(frame, 0, 0, canvas.width, canvas.height);
 
             // Convert the canvas to a Blob (image file)
@@ -157,19 +211,25 @@
                 console.log(data);  // Handle the server's response
 
                 // Update the face and eyes status
-                faceInfo.textContent = `${data.face_position}`;
+                faceInfo.textContent = `${"Left: "+ data.face_position.left}, ${"Top: "+ data.face_position.top}, ${"Width: "+ data.face_position.width}, ${"Height: "+ data.face_position.height}`;
                 eyesStatus.textContent = `${data.status}`;
                 asleepStatus.textContent = `${data.asleep}`;
+
+                // Draw facial features on the video
+                drawFacialFeatures(data);
             }, 'image/jpeg');
         }
 
         // Capture frames every 100ms and send to server if streaming
         setInterval(() => {
             if (isStreaming) {
+                // Resize canvas to match video dimensions
+                overlayCanvas.width = videoElement.videoWidth;
+                overlayCanvas.height = videoElement.videoHeight;
+
                 sendFrameToServer(videoElement);
             }
         }, 100);
-
     </script>
 </body>
 </html>
