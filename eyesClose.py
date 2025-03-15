@@ -2,15 +2,9 @@ import cv2
 import mediapipe as mp
 import math
 import time
-import serial
 
 # --- Set up Serial Communication with Arduino ---
-try:
-    # Change 'COM3' to your Arduino port (or '/dev/ttyXYZ' on macOS/Linux)
-    ser = serial.Serial('COM5', 9600, timeout=1)
-    time.sleep(2)  # Allow time for the connection to establish
-except serial.SerialException:
-    ser = None
+# Add serial communication setup here if required...
 
 # --- Mapping function: maps one range to another ---
 def map_range(value, in_min, in_max, out_min, out_max):
@@ -37,14 +31,9 @@ drawing_spec = mp_drawing.DrawingSpec(thickness=1, circle_radius=1)
 SLEEP_THRESHOLD = 5  # seconds
 closed_start = None
 
-# --- Start capturing video from the webcam ---
-cap = cv2.VideoCapture(0)
-
-while cap.isOpened():
-    ret, frame = cap.read()
-    if not ret:
-        break
-
+def detect_eye_sleep_status(frame):
+    global closed_start
+    
     # Get frame dimensions
     h, w, _ = frame.shape
 
@@ -64,15 +53,6 @@ while cap.isOpened():
         # Process only the first detected face for simplicity
         face_landmarks = results.multi_face_landmarks[0]
 
-        # Optionally draw facial landmarks on the frame
-        mp_drawing.draw_landmarks(
-            image=frame,
-            landmark_list=face_landmarks,
-            connections=mp_face_mesh.FACEMESH_CONTOURS,
-            landmark_drawing_spec=drawing_spec,
-            connection_drawing_spec=drawing_spec
-        )
-
         # --- Compute the Face Center (x, y) ---
         x_coords = [landmark.x for landmark in face_landmarks.landmark]
         y_coords = [landmark.y for landmark in face_landmarks.landmark]
@@ -82,17 +62,13 @@ while cap.isOpened():
 
         # --- Calculate Eye Aspect Ratio (EAR) ---
         # Left eye landmarks (example indices)
-        left_horizontal = euclidean_distance(face_landmarks.landmark[33],
-                                               face_landmarks.landmark[133])
-        left_vertical = euclidean_distance(face_landmarks.landmark[159],
-                                             face_landmarks.landmark[145])
+        left_horizontal = euclidean_distance(face_landmarks.landmark[33], face_landmarks.landmark[133])
+        left_vertical = euclidean_distance(face_landmarks.landmark[159], face_landmarks.landmark[145])
         left_EAR = left_vertical / left_horizontal
 
         # Right eye landmarks (example indices)
-        right_horizontal = euclidean_distance(face_landmarks.landmark[362],
-                                                face_landmarks.landmark[263])
-        right_vertical = euclidean_distance(face_landmarks.landmark[386],
-                                              face_landmarks.landmark[374])
+        right_horizontal = euclidean_distance(face_landmarks.landmark[362], face_landmarks.landmark[263])
+        right_vertical = euclidean_distance(face_landmarks.landmark[386], face_landmarks.landmark[374])
         right_EAR = right_vertical / right_horizontal
 
         # Average EAR for both eyes
@@ -109,16 +85,6 @@ while cap.isOpened():
             status = "Eyes Open"
             closed_start = None  # Reset timer if eyes are open
 
-        # --- Map face center coordinates to servo angles ---
-        # Map face center (x, y) from pixel range to servo angle range [0, 180]
-        servo_x = map_range(face_center_x, 0, w, 0, 180)
-        servo_y = map_range(face_center_y, 0, h, 0, 180)
-
-        # Format command for Arduino (e.g., "X90:Y120\n")
-        command = f"X{servo_x}:Y{servo_y}\n"
-        if ser:
-            ser.write(command.encode())
-
     else:
         closed_start = None
 
@@ -128,21 +94,8 @@ while cap.isOpened():
         if elapsed >= SLEEP_THRESHOLD:
             asleep_text = "Subject is asleep"
 
-    # Display the status, sleep message, and face position on the frame
-    cv2.putText(frame, status, (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-    if asleep_text:
-        cv2.putText(frame, asleep_text, (30, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-    cv2.putText(frame, face_position_text, (30, 110), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
 
-    # Show the video feed
-    cv2.imshow("Face, Eye & Servo Control", frame)
+    return status, face_position_text, asleep_text
 
-    # Press 'q' to exit
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
 
-# Cleanup: Release video capture, close windows, and close serial port if open
-cap.release()
-cv2.destroyAllWindows()
-if ser:
-    ser.close()
+
