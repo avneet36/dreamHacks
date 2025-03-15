@@ -3,24 +3,98 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Eye Tracking</title>
+    <title>Video Stream</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #121212;
+            margin: 0;
+            flex-direction: column;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        #videoContainer {
+            width: 1100px;
+            height: 768px;
+            background-color: black;
+            border: 6px solid gray;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+        }
+        #videoFeed {
+            width: 100%;
+            height: 100%;
+            display: none;
+            object-fit: cover;
+            border-radius: 8px;
+        }
+        .buttons {
+            margin-top: 20px;
+            display: flex;
+            gap: 15px;
+        }
+        button {
+            padding: 14px 24px;
+            font-size: 18px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+        .start {
+            background-color: #007bff;
+            color: white;
+        }
+        .start:hover {
+            background-color: #0056b3;
+        }
+        .stop {
+            background-color: #dc3545;
+            color: white;
+            display: none;
+        }
+        .stop:hover {
+            background-color: #a71d2a;
+        }
+    </style>
 </head>
 <body>
-    <h1>Live Eye State Detection</h1>
+    <div id="videoContainer">
+        <p id="previewText">Video preview will appear here</p>
+        <img id="videoFeed" src="http://127.0.0.1:5000/video_feed" alt="Video Stream">
+    </div>
 
-    <!-- Display the live video stream from Flask -->
-    <img src="http://127.0.0.1:5000/video_feed" width="640" height="480" alt="Video Stream" />
-
-    <div id="status"></div>
+    <div class="buttons">
+        <button class="start" id="startButton">Start Video</button>
+        <button class="stop" id="stopButton">Stop Video</button>
+    </div>
 
     <script>
-        // If you want to display eye status as text (optional)
-        const statusElement = document.getElementById('status');
+        const startButton = document.getElementById("startButton");
+        const stopButton = document.getElementById("stopButton");
+        const videoFeed = document.getElementById("videoFeed");
+        const previewText = document.getElementById("previewText");
 
-        // This could be dynamically updated, but for simplicity, we update it based on the stream.
-        function updateEyeStatus(status) {
-            statusElement.innerText = `Eye Status: ${status}`;
-        }
+        startButton.addEventListener("click", () => {
+            videoFeed.style.display = "block";
+            previewText.style.display = "none";
+            startButton.style.display = "none";
+            stopButton.style.display = "inline-block";
+        });
+
+        stopButton.addEventListener("click", () => {
+            videoFeed.style.display = "none";
+            previewText.style.display = "block";
+            startButton.style.display = "inline-block";
+            stopButton.style.display = "none";
+        });
     </script>
 </body>
 </html>
