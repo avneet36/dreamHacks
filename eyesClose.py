@@ -2,6 +2,7 @@ import cv2
 import mediapipe as mp
 import math
 import time
+import json  # For JSON response
 
 # --- Set up Serial Communication with Arduino ---
 # Add serial communication setup here if required...
@@ -28,7 +29,7 @@ mp_drawing = mp.solutions.drawing_utils
 drawing_spec = mp_drawing.DrawingSpec(thickness=1, circle_radius=1)
 
 # --- Variables for sleep detection ---
-SLEEP_THRESHOLD = 5  # seconds
+SLEEP_THRESHOLD = 5  # seconds for detecting sleep after eyes are closed
 closed_start = None
 
 def detect_eye_sleep_status(frame):
@@ -46,8 +47,12 @@ def detect_eye_sleep_status(frame):
 
     # Default statuses and text messages
     status = "Can't detect"
-    asleep_text = ""
+    asleep_text = "No"
     face_position_text = ""
+
+    # Variables for face and eye positions
+    face_position = {"top": 0, "left": 0, "width": 0, "height": 0}
+    eyes = [{"top": 0, "left": 0, "width": 0, "height": 0}, {"top": 0, "left": 0, "width": 0, "height": 0}]
 
     if results.multi_face_landmarks:
         # Process only the first detected face for simplicity
@@ -60,6 +65,12 @@ def detect_eye_sleep_status(frame):
         face_center_y = int(sum(y_coords) / len(y_coords) * h)
         face_position_text = f"Face: x={face_center_x}, y={face_center_y}"
 
+        # --- Get face bounding box (top, left, width, height) ---
+        face_position["left"] = int(min(x_coords) * w)
+        face_position["top"] = int(min(y_coords) * h)
+        face_position["width"] = int((max(x_coords) - min(x_coords)) * w)
+        face_position["height"] = int((max(y_coords) - min(y_coords)) * h)
+
         # --- Calculate Eye Aspect Ratio (EAR) ---
         # Left eye landmarks (example indices)
         left_horizontal = euclidean_distance(face_landmarks.landmark[33], face_landmarks.landmark[133])
@@ -70,6 +81,15 @@ def detect_eye_sleep_status(frame):
         right_horizontal = euclidean_distance(face_landmarks.landmark[362], face_landmarks.landmark[263])
         right_vertical = euclidean_distance(face_landmarks.landmark[386], face_landmarks.landmark[374])
         right_EAR = right_vertical / right_horizontal
+
+        # --- Get Eye Bounding Boxes ---
+        left_eye_x = int(face_landmarks.landmark[33].x * w)
+        left_eye_y = int(face_landmarks.landmark[33].y * h)
+        right_eye_x = int(face_landmarks.landmark[362].x * w)
+        right_eye_y = int(face_landmarks.landmark[362].y * h)
+
+        eyes[0] = {"top": left_eye_y - 15, "left": left_eye_x - 15, "width": 30, "height": 30}
+        eyes[1] = {"top": right_eye_y - 15, "left": right_eye_x - 15, "width": 30, "height": 30}
 
         # Average EAR for both eyes
         avg_EAR = (left_EAR + right_EAR) / 2.0
@@ -92,10 +112,19 @@ def detect_eye_sleep_status(frame):
     if closed_start is not None:
         elapsed = time.time() - closed_start
         if elapsed >= SLEEP_THRESHOLD:
-            asleep_text = "Subject is asleep"
+            asleep_text = "Yes"
+        else:
+            asleep_text = "No"
 
+    # Create the response in the required format
+    response = {
+        "face_position": face_position,
+        "eyes": eyes,
+        "status": status,
+        "asleep": asleep_text
+    }
 
-    return status, face_position_text, asleep_text
+    return response
 
-
-
+if __name__ == "__main__":
+    
