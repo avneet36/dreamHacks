@@ -6,7 +6,7 @@ import serial
 
 # --- Set up Serial Communication with Arduino ---
 try:
-    # Change 'COM3' to your Arduino port (or '/dev/ttyXYZ' on macOS/Linux)
+    # Change 'COM5' to your Arduino port (or '/dev/ttyXYZ' on macOS/Linux)
     ser = serial.Serial('COM5', 9600, timeout=1)
     time.sleep(2)  # Allow time for the connection to establish
 except serial.SerialException:
@@ -36,6 +36,7 @@ drawing_spec = mp_drawing.DrawingSpec(thickness=1, circle_radius=1)
 # --- Variables for sleep detection ---
 SLEEP_THRESHOLD = 5  # seconds
 closed_start = None
+sleepTriggered = False  # Flag to ensure "start" is sent only once
 
 # --- Start capturing video from the webcam ---
 cap = cv2.VideoCapture(0)
@@ -107,13 +108,14 @@ while cap.isOpened():
                 closed_start = time.time()
         else:
             status = "Eyes Open"
-            closed_start = None  # Reset timer if eyes are open
+            closed_start = None
+            sleepTriggered = False  # Reset the flag when eyes open
 
         # --- Map face center coordinates to servo angles ---
         # Map face center (x, y) from pixel range to servo angle range [0, 180]
         servo_x = map_range(face_center_x, 0, w, 0, 180)
         servo_y = map_range(face_center_y, 0, h, 0, 180)
-
+        servo_y = 180 - servo_y  # Invert Y if needed
         # Format command for Arduino (e.g., "X90:Y120\n")
         command = f"X{servo_x}:Y{servo_y}\n"
         if ser:
@@ -127,6 +129,10 @@ while cap.isOpened():
         elapsed = time.time() - closed_start
         if elapsed >= SLEEP_THRESHOLD:
             asleep_text = "Subject is asleep"
+            # Send "start" command once if not already triggered
+            if ser and not sleepTriggered:
+                ser.write("start\n".encode())
+                sleepTriggered = True
 
     # Display the status, sleep message, and face position on the frame
     cv2.putText(frame, status, (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
