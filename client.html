@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webcam Video Streaming</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f4f4f4;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            flex-direction: column;
+        }
+
+        h1 {
+            font-size: 2em;
+            margin-bottom: 20px;
+            color: #4CAF50;
+        }
+
+        video {
+            border: 2px solid #4CAF50;
+            border-radius: 8px;
+            width: 100%;
+            max-width: 640px;
+            margin-bottom: 20px;
+            height: 100%;
+        }
+
+        button {
+            background-color: #4CAF50;
+            color: white;
+            font-size: 1.1em;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            margin-bottom: 20px;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        #info {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            text-align: left;
+            width: 100%;
+            max-width: 640px;
+        }
+
+        p {
+            font-size: 1.1em;
+            margin-bottom: 10px;
+        }
+
+        .status-label {
+            font-weight: bold;
+            color: #555;
+        }
+
+        .status-value {
+            color: #4CAF50;
+        }
+        #container{
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+    <h1>Webcam Video Feed</h1>
+    <video id="videoElement" autoplay playsinline></video>
+    <button id="toggleButton">Start Webcam</button>
+    <div id="info">
+        <p><span class="status-label">Face Position:</span> <span id="faceInfo" class="status-value">N/A</span></p>
+        <p><span class="status-label">Eyes Status:</span> <span id="eyesStatus" class="status-value">N/A</span></p>
+        <p><span class="status-label">Asleep:</span> <span id="asleepStatus" class="status-value">N/A</span></p>
+    </div>
+</div>
+    <script>
+        const videoElement = document.getElementById('videoElement');
+        const toggleButton = document.getElementById('toggleButton');
+        const faceInfo = document.getElementById('faceInfo');
+        const eyesStatus = document.getElementById('eyesStatus');
+        const asleepStatus = document.getElementById('asleepStatus');
+
+        let stream;
+        let isStreaming = false;
+
+        // Access the webcam and display it in the video element
+        async function startWebcam() {
+            try {
+                const newStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                videoElement.srcObject = newStream;
+                stream = newStream;
+                toggleButton.textContent = "Stop Webcam";
+                isStreaming = true;
+            } catch (err) {
+                console.error("Error accessing webcam: ", err);
+            }
+        }
+
+        function stopWebcam() {
+            if (stream) {
+                const tracks = stream.getTracks();
+                tracks.forEach(track => track.stop());
+                videoElement.srcObject = null;
+            }
+            toggleButton.textContent = "Start Webcam";
+            isStreaming = false;
+        }
+
+        toggleButton.addEventListener('click', () => {
+            if (isStreaming) {
+                stopWebcam();
+            } else {
+                startWebcam();
+            }
+        });
+
+        // Send image frames to the server
+        async function sendFrameToServer(frame) {
+            const canvas = document.createElement('canvas');
+            canvas.width = frame.videoWidth;
+            canvas.height = frame.videoHeight;
+            const context = canvas.getContext('2d');
+            context.drawImage(frame, 0, 0, canvas.width, canvas.height);
+
+            // Convert the canvas to a Blob (image file)
+            canvas.toBlob(async function(blob) {
+                // Create a FormData object to send the file
+                const formData = new FormData();
+                formData.append('file', blob, 'frame.jpg');
+
+                // Send the image to the server using fetch
+                const response = await fetch('http://127.0.0.1:5001/process_video', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                console.log(data);  // Handle the server's response
+
+                // Update the face and eyes status
+                faceInfo.textContent = `${data.face_position}`;
+                eyesStatus.textContent = `${data.status}`;
+                asleepStatus.textContent = `${data.asleep}`;
+            }, 'image/jpeg');
+        }
+
+        // Capture frames every 100ms and send to server if streaming
+        setInterval(() => {
+            if (isStreaming) {
+                sendFrameToServer(videoElement);
+            }
+        }, 100);
+
+    </script>
+</body>
+</html>
