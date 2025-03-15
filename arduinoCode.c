@@ -1,92 +1,104 @@
-import cv2       
-import mediapipe as mp
-import serial
-import time
+#include <Wire.h>
+#include <Adafruit_PWMServoDriver.h>
 
-# Initialize Serial Communication (Change 'COM3' to match your system)
-try:
-    ser = serial.Serial('/dev/cu.usbserial-A5069RR4', 9600, timeout=1)
-    time.sleep(2)  # Allow time for the connection to establish
-    print("Connected to Arduino")
-except serial.SerialException:
-    print("Failed to connect to Arduino!")
-    ser = None
+// Create the PWM driver object (default I2C address is 0x40)
+Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(0x40);
 
-# Initialize Mediapipe Face Detection
-mp_face_detection = mp.solutions.face_detection
-face_detection = mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.7)
+// Define minimum and maximum pulse lengths for your servos
+#define SERVOMIN  150  // Minimum pulse length count
+#define SERVOMAX  600  // Maximum pulse length count
 
-# Open the webcam
-cap = cv2.VideoCapture(0)
+// Servo channels
+#define SERVO_X 0  // Channel 0 (X movement)
+#define SERVO_Y 1  // Channel 1 (Y movement)
+#define SERVO_2 2  // Channel 2 (spray routine)
+#define SERVO_3 3  // Channel 3 (spray routine)
 
-# Servo control variables
-servo_x, servo_y = 90, 90  # Start servos in the center
-MOVEMENT_STEP = 3  # Larger step size for faster movement
-TOLERANCE = 1  # Allowable margin of error
+// Function to map an angle (0-180) to a pulse length
+uint16_t mapAngleToPulse(int angle) {
+  return map(angle, 0, 180, SERVOMIN, SERVOMAX);
+}
 
-# **Camera to Laser Correction Factors (Adjust these manually)**
-X_CORRECTION = 10  # Shift left/right
-Y_CORRECTION = -15   # Shift up/down
+// Variables to store last angles for X and Y (to reduce jitter)
+int lastX = -1;
+int lastY = -1;
+const int angleThreshold = 2; // Only update if change > 2 degrees
 
-# Map function: Maps screen coordinates (0  -640) to servo angles (0-180)
-def map_range(value, in_min, in_max, out_min, out_max):
-    return int((value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min)
+// Limit update frequency for x/y commands
+unsigned long lastUpdateTime = 0;
+const unsigned long updateInterval = 50; // milliseconds
 
-while cap.isOpened():
-    ret, frame = cap.read()
-    if not ret:
-        break
+// Flag to indicate that the spray routine is running
+bool inSprayMode = false;
 
-    # Flip frame horizontally for natural movement
-    frame = cv2.flip(frame, 1)
-    h, w, _ = frame.shape
+// Function to move a given servo to the specified angle
+void moveServo(uint8_t channel, int angle) {
+  int pulse = mapAngleToPulse(angle);
+  pwm.setPWM(channel, 0, pulse);
+}
 
-    # Convert frame to RGB (needed for Mediapipe)
-    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    results = face_detection.process(rgb_frame)
+void setup() {
+  Serial.begin(9600);
+  pwm.begin();
+  pwm.setPWMFreq(60);  // Set to 60 Hz for typical servos
+  moveServo(SERVO_Y, 10);
+  moveServo(SERVO_X, 50);
+}
 
-    if results.detections:
-        for detection in results.detections:
-            # Get eye landmarks from detection
-            keypoints = detection.location_data.relative_keypoints
-            left_eye = keypoints[0]  # Left eye
-            right_eye = keypoints[1]  # Right eye
+// Function that executes the spray routine (runs completely regardless of new commands)
+void executeSprayRoutine() {
+  inSprayMode = true;
+  // Optionally clear any lingering serial input:
+  while (Serial.available() > 0) { Serial.read(); }
+  
+  // Example loop: run the spray routine 10 times
+  for (int i = 0; i < 10; i++) {
+    moveServo(SERVO_2, 0);
+    moveServo(SERVO_3, 180);
+    delay(400);
+    moveServo(SERVO_2, 180);
+    moveServo(SERVO_3, 0);
+    delay(250);
+  }
+  inSprayMode = false;
+  // Indicate completion (this print is optional)
+  Serial.println("Done");
+}
 
-            # Convert normalized coordinates (0-1) to pixels
-            left_eye_x, left_eye_y = int(left_eye.x * w), int(left_eye.y * h)
-            right_eye_x, right_eye_y = int(right_eye.x * w), int(right_eye.y * h)
+void loop() {
+  // Only process incoming commands if not currently in spray mode
+  if (!inSprayMode && Serial.available()) {
+    String command = Serial.readStringUntil('\n');
+    command.trim();
 
-            # Determine which eye is closer (lower Y = closer)
-            closer_eye = (left_eye_x, left_eye_y) if left_eye_y < right_eye_y else (right_eye_x, right_eye_y)
+    // If command is "start", run the spray routine
+    if (command == "start") {
+      executeSprayRoutine();
+    }
+    else {
+      // Otherwise, process x/y servo commands, expecting format "X<angle>:Y<angle>"
+      int indexX = command.indexOf('X');
+      int indexColon = command.indexOf(':');
+      int indexY = command.indexOf('Y');
 
-            # **Apply perspective correction**
-            corrected_x = closer_eye[0] + X_CORRECTION
-            corrected_y = closer_eye[1] + Y_CORRECTION
+      if (indexX != -1 && indexColon != -1 && indexY != -1) {
+        String xStr = command.substring(indexX + 1, indexColon);
+        String yStr = command.substring(indexY + 1);
 
-            # Convert eye position to servo angles (0-180 degrees)
-            target_x = map_range(corrected_x, 0, w, 0, 180)
-            target_y = map_range(corrected_y, 0, h, 0, 180)
+        int xAngle = xStr.toInt();
+        int yAngle = yStr.toInt();
 
-            # Send servo positions to Arduino
-            if ser:
-                command = f'X{target_x}:Y{target_y}\n'
-                ser.write(command.encode())
-                print(f"Sent to Arduino: {command}")
-
-            # Draw tracking circles on eyes
-            cv2.circle(frame, (left_eye_x, left_eye_y), 5, (0, 255, 0), -1)
-            cv2.circle(frame, (right_eye_x, right_eye_y), 5, (255, 0, 0), -1)
-            cv2.circle(frame, closer_eye, 8, (0, 0, 255), -1)  # Red dot on tracked eye
-
-    # Display the output
-    cv2.imshow("Eye Tracking with Perspective Correction", frame)
-
-    # Press 'q' to exit
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-
-# Cleanup
-cap.release()
-cv2.destroyAllWindows()
-if ser:
-    ser.close()
+        unsigned long now = millis();
+        if (now - lastUpdateTime >= updateInterval) {
+          if (abs(xAngle - lastX) > angleThreshold || abs(yAngle - lastY) > angleThreshold) {
+            moveServo(SERVO_X, xAngle);
+            moveServo(SERVO_Y, yAngle);
+            lastX = xAngle;
+            lastY = yAngle;
+          }
+          lastUpdateTime = now;
+        }
+      }
+    }
+  }
+}
