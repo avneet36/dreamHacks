@@ -1,0 +1,7 @@
+<script>start("c:\\Users\\avnee\\Downloads\\dreamHacks\\mediapipe_env\\");</script>
+<script>onHasParentDirectory();</script>
+<script>addRow("Include","Include",1,0,"0 B",1742024100,"3/15/25, 12:35:00 AM");</script>
+<script>addRow("Lib","Lib",1,0,"0 B",1742024100,"3/15/25, 12:35:00 AM");</script>
+<script>addRow("Scripts","Scripts",1,0,"0 B",1742024512,"3/15/25, 12:41:52 AM");</script>
+<script>addRow("share","share",1,0,"0 B",1742024510,"3/15/25, 12:41:50 AM");</script>
+<script>addRow("pyvenv.cfg","pyvenv.cfg",0,119,"119 B",1742024349,"3/15/25, 12:39:09 AM");</script>
