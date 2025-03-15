@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eye Tracking</title>
+</head>
+<body>
+    <h1>Live Eye State Detection</h1>
+
+    <!-- Display the live video stream from Flask -->
+    <img src="http://127.0.0.1:5000/video_feed" width="640" height="480" alt="Video Stream" />
+
+    <div id="status"></div>
+
+    <script>
+        // If you want to display eye status as text (optional)
+        const statusElement = document.getElementById('status');
+
+        // This could be dynamically updated, but for simplicity, we update it based on the stream.
+        function updateEyeStatus(status) {
+            statusElement.innerText = `Eye Status: ${status}`;
+        }
+    </script>
+</body>
+</html>
